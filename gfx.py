@@ -22,11 +22,11 @@ DRAWN_ON_CLOSED = "Cannot draw on a closed window"
 INVALID_CONFIG_OPTION = "Attempted to use invalid config option"
 
 class Root(tk.Tk):
-    def __init__(self, title='Root', width=640, height=480, **options):
+    def __init__(self, title='Root', width=800, height=600, **options):
         super().__init__(*options)
         self.title(title)
         self.geometry('%sx%s' % (width, height))
-        
+        #self.resizable(0,0)
         # Default Binds
         self.bind('<Escape>', self._on_closing) 
         
@@ -68,36 +68,33 @@ class PixelGrid(tk.Canvas):
     """A tkinter.Canvas() that has been abstracted supplied with various
     helpful methods."""
     
-    def __init__(self, master):
-        tk.Canvas.__init__(self, master)
+    def __init__(self, master, width=800, height=600):
+        
+        tk.Canvas.__init__(self, master, width=width, height=height)
         self.master = master
-        self.w = self.winfo_reqwidth()
-        self.h = self.winfo_reqheight()
         self.bind('<Configure>', self._onconfigure)
         self.config(
             background = 'black',
             highlightthickness=0,
             border=0
         )
+        self.w = self.winfo_reqwidth()
+        self.h = self.winfo_reqheight()
+        print(self.w)
         self.trans = None
         self.objects = []
         
     def _onconfigure(self, event):
-        w0, h0 = self.w, self.h
         self.w = self.winfo_width()
         self.h = self.winfo_height()
-        dx, dy = self.w - w0, self.h - h0
         if self.trans:
             self.trans.w = self.w
             self.trans.h = self.h
-        for obj in self.objects:
-            # Origin is already moved with object, prevent moving twice!
-            if obj.isDrawn() and not isinstance(obj, Origin):
-                obj.move(0, -dy)
+        self.redraw()
                
     def setCoords(self, xlow, ylow, xhigh, yhigh):
         self.trans = Transform(self.w, self.h, xlow, ylow, xhigh, yhigh)
-    
+        
     def move(self, shape, dx, dy):
         tk.Canvas.move(self, shape, dx, dy)
 
@@ -123,9 +120,12 @@ class PixelGrid(tk.Canvas):
         if trans:
             return self.trans.world(xs, ys)
         else:
-            return x, y
+            return xs, ys
         
-
+    def redraw(self):
+        for object in self.objects[:]:
+            object.undraw()
+            object.draw(self)
         
 # Dictionary of default options to configure a GraphicsObject with
 DEFAULT_CONFIG = {
@@ -155,6 +155,7 @@ class GraphicsObject(object):
         if self.pg and self.id:
             self.pg.delete(self.id)
             self.id = None
+            self.pg.objects.remove(self)
     
     def draw(self, pg):
         if self.pg and self.id:
@@ -194,12 +195,7 @@ class GraphicsObject(object):
 
             # Update origin position
             if self.origin:
-                # If it was drawn, this move method would handle it, otherwise:
-                if not self.origin.isDrawn():
-                    self.origin.x += x
-                    self.origin.y -= y
-                else:
-                    self.origin.move(dx, dy)
+                self.origin.move(dx, dy)
                 
     def rotate(self, angle):
         if not self.id:
@@ -285,8 +281,8 @@ class Origin(Point):
   
   
 class _BBox(GraphicsObject):
-    def __init__(self, origin, p1, p2):
-        super().__init__(['outline', 'fill'])
+    def __init__(self, origin, p1, p2, options=['outline',"width","fill"]):
+        super().__init__(options)
         self.origin = origin
         self.points = [p1.clone(), p2.clone()]
         
@@ -321,6 +317,19 @@ class Rectangle(_BBox):
         return pg.create_rectangle(x1, y1, x2, y2, options)
        
        
+class Line(_BBox):
+    def __init__(self, origin, p1, p2):
+        super().__init__(origin, p1, p2, ["arrow","fill","width"])
+        
+    def _draw(self, pg, options):
+        p1 = self.points[0]
+        p2 = self.points[1]
+        x1, y1 = pg.toScreen(p1.x, p1.y)
+        x2, y2 = pg.toScreen(p2.x, p2.y)
+        
+        return pg.create_line(x1, y1, x2, y2, options)
+       
+       
 class Oval(_BBox):
     def __init__(self, origin, p1, p2):
         super().__init__(origin, p1, p2)
@@ -343,7 +352,7 @@ class Circle(Oval):
         self.radius = r
         
     def _draw(self, pg, options):
-        cx, cy = pg.toScreen(self.origin.getX(), self.origin.getY())
+        cx, cy = pg.toScreen(self.origin.x, self.origin.y)
         r = self.radius
         return pg.create_oval(cx-r, cy-r, cx+r, cy+r, options)
     
@@ -390,6 +399,7 @@ class PolyCircle(Polygon):
     def newVertCount(self, vertices):
         self.pg.coords(self.id, 30, 40, 30, 50, 40, 50)
         
+        
 class ExampleApp(object):
     def __init__(self, master):
         self.master = master
@@ -411,7 +421,7 @@ class ExampleApp(object):
         self.rec4 = Polygon(Origin(250,200), Point(200,300), Point(300,300), Point(300,100), Point(200,100))
         self.rec4.draw(self.pg)
         self.rec4.origin.draw(self.pg)
-        self.circ = Circle(Origin(500, 500), Point(20, 20), 20)
+        self.circ = Circle(Origin(200, 300), Point(20, 20), 20)
         self.circ.draw(self.pg)
         
         # Poly Circles
@@ -442,7 +452,7 @@ class ExampleApp(object):
         
         self.master.bind('<Left>', self.rotation)
         self.master.bind('<Right>', self.rotation)
-
+        self.pg.redraw()
         self.moving()
         
     def moving(self):

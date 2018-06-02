@@ -5,7 +5,9 @@ __version__ = '0.1.0'
 from gfx import *
 import math
 import time
-        
+import random
+
+
 class Game(object):
     def __init__(self, master):
         self.master = master
@@ -22,6 +24,12 @@ class Game(object):
         
         # Ship
         self.ship = Ship(self.pg, 15, 15)
+        
+        # Asteroids
+        self.asteroids = []
+        self.ast_gen_freq = 1 #seconds
+        self.ast_last_gen_time = time.time()
+        self.ast_update_i = 0
         
         # Test VProjectile
         shape = Circle(Origin(0,0), Point(0,0), 10)
@@ -48,6 +56,7 @@ class Game(object):
         
         self.update_projectiles()
         self.handle_offscreen_objects()
+        self.handle_asteroid_generation()
         #self.locationCheck()
                 
         endtime = time.time()
@@ -55,7 +64,6 @@ class Game(object):
         self.gl_last_endtime = endtime
         self.pg.after(16, self.gameloop)
        
-        
     def update_projectiles(self):
         # Ship
         self.ship.update(0.08)
@@ -64,6 +72,11 @@ class Game(object):
         if self.ship.isRotating():
             self.ship.rotate()
         
+        # Asteroids
+        for asteroid in self.asteroids:
+            asteroid.update(0.1)
+            asteroid.rotate(1)
+            
         #self.testVproj.update(0.1)
      
     def handle_offscreen_objects(self):
@@ -77,12 +90,56 @@ class Game(object):
             self.ship.move(0, -self.ship.getY())
         elif self.ship.getY() < 0:
             self.ship.move(0, self.pg.h)
+            
+        for asteroid in self.asteroids:
+            if asteroid.getX() > self.pg.w:
+                asteroid.move(-asteroid.getX(), 0)
+            elif asteroid.getX() < 0:
+                asteroid.move(self.pg.w, 0)
+            
+            if asteroid.getY() > self.pg.h:
+                asteroid.move(0, -asteroid.getY())
+            elif asteroid.getY() < 0:
+                asteroid.move(0, self.pg.h)
                   
     def handle_asteroid_generation(self):
-        ast = Asteroid(self, x, y, ang, vel)
+        if time.time() - self.ast_last_gen_time >= self.ast_gen_freq:
+            w = self.pg.getWidth()
+            h = self.pg.getHeight()
+            
+            # Start on x or y?
+            plane = random.randrange(0,2)
+            
+            # Start on x
+            if plane == 0:
+                x_choices = [0, w]
+                choice = random.randrange(0,2)
+                if choice == 0:
+                    ang = random.randrange(-85, 86)
+                else:
+                    ang = random.randrange(105, 265)
+                x = x_choices[choice]
+                y = random.randrange(0,h)
+            # Start on y
+            else:
+                y_choices = [0, h]
+                choice = random.randrange(0,2)
+                if choice == 0:
+                    ang = random.randrange(20, 160)
+                else:
+                    ang = random.randrange(190, 340)
+                y = y_choices[choice]
+                x = random.randrange(0,w)
+            
+            vel = random.randrange(40,15)
+            ast = Asteroid(self.pg, ang, vel, x, y)
+            self.asteroids.append(ast)
+            
+            self.ast_last_gen_time = time.time()
     
     def debug(self):
         pass
+     
      
 class Player(object):
     def __init__(self, name):
@@ -97,7 +154,7 @@ class Projectile(object):
     """A projectile class that keeps track and updates a virtual projectile
     with a given amount of time"""
     def __init__(self, ang, vel, x, y):
-        self.theta = (ang * math.pi / 180) % 360
+        self.theta = ((ang%360) * math.pi / 180)
         self.xvel = vel * math.cos(self.theta)
         self.yvel = vel * math.sin(self.theta)
         self.x = x
@@ -310,10 +367,19 @@ class Ship(VProjectile):
     def isRotating(self):
         return self.rotating
         
-
-
+class Asteroid(VProjectile):
+    def __init__(self, pg, ang, vel, x, y):
+        shape = self._genShape(x, y)
+        shape.draw(pg)
+        super().__init__(pg, shape, ang, vel, x, y)
+        
+    def _genShape(self, x, y):
+        shape = PolyCircle(Origin(x, y), Point(x, y), 20, 5)
+        return shape
+        
 def main():
     root = Root('TKasteroids')
+    root.resizable(0, 0)
     game = Game(root)
     root.mainloop()
     

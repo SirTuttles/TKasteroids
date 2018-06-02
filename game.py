@@ -131,7 +131,7 @@ class Game(object):
                 y = y_choices[choice]
                 x = random.randrange(0,w)
             
-            vel = random.randrange(40,15)
+            vel = random.randrange(10,15)
             ast = Asteroid(self.pg, ang, vel, x, y)
             self.asteroids.append(ast)
             

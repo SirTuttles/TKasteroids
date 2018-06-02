@@ -4,7 +4,7 @@ __version__ = '0.1.0'
 
 from gfx import *
 import math
-
+import time
         
 class Game(object):
     def __init__(self, master):
@@ -15,30 +15,75 @@ class Game(object):
         self.pg.setCoords(0, 0, self.pg.getWidth()-1, self.pg.getHeight()-1)
         self.pg.pack(fill='both', expand=1)
         
+        # Backend statistics
+        self.fps = 0
+        self.gl_exec_time = 0
+        
+        
         # Ship
         self.ship = Ship(self.pg, 15, 15)
         
+        # Test VProjectile
         shape = Circle(Origin(0,0), Point(0,0), 10)
         shape.draw(self.pg)
         self.testVproj = VProjectile(self.pg, shape, 45, 20, 0, 0)
+        
         # Stopcodes
         self.sc_gameloop = None
         
         # Binds
         
         
+        # Toggle Debugging Features per object
+        #self.debug()
+        #self.ship.debug()
+        
+        self.gl_last_endtime = time.time()
         self.start()
 
     def start(self):
         self.gameloop()
-        
-        
-    def gameloop(self):
-        self.ship.update()
-        self.testVproj.update()
-        self.pg.after(15, self.gameloop)
 
+    def gameloop(self):
         
+        self.update_projectiles()
+        self.handle_offscreen_objects()
+        #self.locationCheck()
+                
+        endtime = time.time()
+        print(round(endtime - self.gl_last_endtime, 3))
+        self.gl_last_endtime = endtime
+        self.pg.after(16, self.gameloop)
+       
+        
+    def update_projectiles(self):
+        # Ship
+        self.ship.update(0.08)
+        if self.ship.isAccelerting():
+            self.ship.accel()
+        if self.ship.isRotating():
+            self.ship.rotate()
+        
+        #self.testVproj.update(0.1)
+     
+    def handle_offscreen_objects(self):
+        # What to do if ship escapes an edge of window
+        if self.ship.getX() > self.pg.w:
+            self.ship.move(-self.ship.getX(), 0)
+        elif self.ship.getX() < 0:
+            self.ship.move(self.pg.w, 0)
+        
+        if self.ship.getY() > self.pg.h:
+            self.ship.move(0, -self.ship.getY())
+        elif self.ship.getY() < 0:
+            self.ship.move(0, self.pg.h)
+                  
+    def handle_asteroid_generation(self):
+        ast = Asteroid(self, x, y, ang, vel)
+    
+    def debug(self):
+        pass
+     
 class Player(object):
     def __init__(self, name):
         self.name = name
@@ -46,6 +91,7 @@ class Player(object):
         
     def save(self):
         pass
+        
         
 class Projectile(object):
     """A projectile class that keeps track and updates a virtual projectile
@@ -122,6 +168,10 @@ class Projectile(object):
     
     def setY(self, y):
         self.y = y
+        
+    def move(self, dx, dy):
+        self.x += dx
+        self.y += dy
        
        
 class VProjectile(Projectile):
@@ -131,7 +181,7 @@ class VProjectile(Projectile):
         self.shape = shape
         self.last_pos = [x, y]
 
-        self.debugging = True
+        self.debugging = False
         # Debugging attributes
         self.real_pathHist = []
         self.shape_pathHist = []
@@ -180,17 +230,19 @@ class VProjectile(Projectile):
         self.shape.rotate(-angle)
         self.addAngle(angle)
         
+    def debug(self):
+        self.debugging = True
     
-class Ship(object):
+class Ship(VProjectile):
     def __init__(self, pg, x, y):
-        self.pg = pg
-        self.shape = Polygon(
-            Origin(15, 15),
+        
+        shape = Polygon(
+            Origin(x, y),
             Point(10, 10),
             Point(30, 15),
             Point(10, 20))
-        self.shape.draw(pg)
-        self.vproj = VProjectile(self.pg, self.shape, 0, 0, x, y)
+        shape.draw(pg)
+        super().__init__(pg, shape, 0, 0, x, y)
         
         # Base Attributes
         self.max_accel = 100
@@ -219,52 +271,46 @@ class Ship(object):
         
     def acceleration(self, event):
         if event.type == '3':
-            if self.sc_accelerating:
-                self.pg.after_cancel(self.sc_accelerating)
+            if self.accelerating:
                 self.accelerating = False
-                return True
+                return False
                 
         if not self.accelerating:
             if event.keysym == 'Up':
                 self.dir_accel = self.inc_accel
+                self.accelerating = True
             elif event.keysym == 'Down':
                 self.dir_accel = -self.inc_accel
-                
-            self.accel()
-            self.accelerating = True
+                self.accelerating = True
+
         
     def accel(self):
-        self.vproj.addVel(self.dir_accel)
-        self.sc_accelerating = self.pg.after(15, self.accel)
+        super().addVel(self.dir_accel)
+        
+    def isAccelerting(self):
+        return self.accelerating
         
     def rotation(self, event):
         if event.type == '3':
-            if self.sc_rotating:
-                self.pg.after_cancel(self.sc_rotating)
+            if self.rotating:
                 self.rotating = False
                 return True
                 
         if not self.rotating:
             if event.keysym == 'Right':
                 self.dir_rotate = self.inc_rotate
+                self.rotating = True
             elif event.keysym == 'Left':
                 self.dir_rotate = -self.inc_rotate
-                
-            self.rotate()
-            self.rotating = True
+                self.rotating = True
     
     def rotate(self):
-        self.vproj.rotate(self.dir_rotate)
-        self.sc_rotating = self.pg.after(15, self.rotate)
+        super().rotate(self.dir_rotate)
 
-    def setX(self, x):
-        self.vproj.setX(x)
+    def isRotating(self):
+        return self.rotating
         
-    def setY(self, y):
-        self.vproj.setY(y)
-        
-    def update(self, t=None):
-        self.vproj.update(t)
+
 
 def main():
     root = Root('TKasteroids')

@@ -80,6 +80,7 @@ class PixelGrid(tk.Canvas):
         )
         self.w = self.winfo_reqwidth()
         self.h = self.winfo_reqheight()
+        self.center = Point(self.w/2, self.h/2)
         print(self.w)
         self.trans = None
         self.objects = []
@@ -103,6 +104,9 @@ class PixelGrid(tk.Canvas):
         
     def getHeight(self):
         return self.h
+        
+    def getCenter(self):
+        return self.center
         
     def place(self, shape, x, y):
         new = []
@@ -145,6 +149,7 @@ class GraphicsObject(object):
         self.id = None
         self.origin = None
         self.points = None
+        self.center = None
         
         config = {}
         for option in options:
@@ -193,9 +198,12 @@ class GraphicsObject(object):
                 y = dy
             self.pg.move(self.id, x, y)   
 
-            # Update origin position
-            if self.origin:
-                self.origin.move(dx, dy)
+        # Update origin position
+        if self.origin:
+            self.origin.move(dx, dy)
+            
+        if self.center:
+            self.center.move(dx, dy)
                 
     def rotate(self, angle):
         if not self.id:
@@ -245,6 +253,34 @@ class GraphicsObject(object):
         if self.pg:
             self.pg.itemconfig(self.id, options)
     
+    def getPoints(self):
+        return self.points
+       
+    def getCenter(self):
+        return self.center
+       
+    def findCenter(self):
+        points = self.points
+        lowx = points[0].x
+        highx = points[0].x
+        lowy = points[0].y
+        highy = points[0].y
+        
+        for point in points:
+            x, y = point.getX(), point.getY()
+            if x > highx:
+                highx = x
+            if x < lowx:
+                lowx = x
+                
+            if y > highy:
+                highy = y
+            if y < lowy:
+                lowy = y
+        cx = lowx + (highx - lowx) / 2
+        cy = lowy + (highy - lowy) / 2
+        return Point(cx, cy)
+    
     
 class Point(GraphicsObject):
     def __init__(self, x, y):
@@ -255,6 +291,9 @@ class Point(GraphicsObject):
         
     def getX(self): return self.x
     def getY(self): return self.y
+    
+    def getPos(self):
+        return [self.x, self.y]
     
     def _draw(self, pg, options):
         x, y = pg.toScreen(self.x, self.y)
@@ -268,7 +307,7 @@ class Point(GraphicsObject):
     def _move(self, dx, dy):
         self.x += dx
         self.y += dy
-        
+       
   
 class Origin(Point):
     """A Point with some small additions & modifications"""
@@ -283,8 +322,14 @@ class Origin(Point):
 class _BBox(GraphicsObject):
     def __init__(self, origin, p1, p2, options=['outline',"width","fill"]):
         super().__init__(options)
-        self.origin = origin
         self.points = [p1.clone(), p2.clone()]
+        self.width = abs(p2.getX() - p1.getX())
+        self.height = abs(p2.getY() - p1.getY())
+        self.center = self.findCenter()
+        if origin == 'center':
+            self.origin = self.center.clone()
+        else:
+            self.origin = origin
         
     def _move(self, dx, dy):
         p1 = self.points[0]
@@ -302,6 +347,12 @@ class _BBox(GraphicsObject):
         
     def getOrigin(self):
         return self.origin
+        
+    def getWidth(self):
+        return self.width
+        
+    def getHeight(self):
+        return self.height
         
   
 class Rectangle(_BBox):
@@ -360,8 +411,12 @@ class Circle(Oval):
 class Polygon(GraphicsObject):
     def __init__(self, origin, *points):
         super().__init__(['fill', 'outline'])
-        self.origin = origin
         self.points = points
+        self.center = self.findCenter()
+        if origin == 'center':
+            self.origin = self.center.clone()
+        else:
+            self.origin = origin
         
     def _draw(self, pg, options):
         coords = []

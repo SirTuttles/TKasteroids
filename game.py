@@ -59,14 +59,12 @@ class Game(object):
         self.gameloop()
 
     def gameloop(self):
-        
         self.update_projectiles()
         self.check_collisions()
         self.handle_offscreen_objects()
         self.handle_asteroid_generation()
         self.handle_ship_fire()
         endtime = time.time()
-        print(round(endtime - self.gl_last_endtime, 3))
         self.gl_last_endtime = endtime
         self.pg.after(16, self.gameloop)
     
@@ -130,13 +128,9 @@ class Game(object):
                     asteroid.handle_collision()
 
     def handle_ship_fire(self):
-        if self.ship.fire():
-            shape = Rectangle('center', 
-                Point(self.ship.getX(), self.ship.getY()),
-                Point(self.ship.getX()+2, self.ship.getY()+2))
-            shape.draw(self.pg)
-            shot = VProjectile(self.pg, shape, -self.ship.theta*180/math.pi, 40,
-                self.ship.getX(), self.ship.getY())
+        shot = self.ship.getShot()
+        if shot:
+            print('HERE')
             self.shots.append(shot)
             
                   
@@ -179,8 +173,11 @@ class Game(object):
     
     def debug(self):
         pass
-     
-     
+        
+    def kill_projectile(self, proj):
+        pass
+        
+
 class Player(object):
     def __init__(self, name):
         self.name = name
@@ -278,7 +275,7 @@ class VProjectile(Projectile):
         self.shape = shape
         self.collider = genCollisionBox(shape)
         self.last_pos = [x, y]
-        self.impact = False
+        self.collision = False
         
         self.debugging = False
         # Debugging attributes
@@ -291,52 +288,51 @@ class VProjectile(Projectile):
         self.vis_left_edge = None
         
     def update(self, t=None):
-        if not self.impact:
-            super().update(t)
-            x0, y0 = self.last_pos[0], self.last_pos[1]
-            dx, dy = self.x - x0, self.y - y0
-            self.shape.move(dx, dy)
-            self.collider.move(dx, dy)
-            self.last_pos = [self.x, self.y]
-        
-        # Debugging Visualizers
-        if self.debugging:
-            # Make collider visible
-            if not self.collider.isDrawn():
-                self.collider.draw(self.pg)
-        
-            # Path history of real projectile
-            hist_point1 = Point(x0, y0)
-            hist_point1.draw(self.pg)
-            hist_point1.setFill('lightgreen')
-            self.real_pathHist.append(hist_point1)
-            if len(self.real_pathHist) > 100:
-                dead = self.real_pathHist.pop(0)
-                dead.undraw()
-                
-            # Path history of shape shadowing projectile
-            xh = self.shape.origin.getX()
-            yh = self.shape.origin.getY()
-            hist_point2 = Point(xh, yh)
-            hist_point2.setFill('blue')
-            hist_point2.draw(self.pg)
-            self.shape_pathHist.append(hist_point2)
-            if len(self.shape_pathHist) > 150:
-                dead = self.shape_pathHist.pop(0)
-                dead.undraw()
+        super().update(t)
+        x0, y0 = self.last_pos[0], self.last_pos[1]
+        dx, dy = self.x - x0, self.y - y0
+        self.shape.move(dx, dy)
+        self.collider.move(dx, dy)
+        self.last_pos = [self.x, self.y]
+    
+    # Debugging Visualizers
+    if self.debugging:
+        # Make collider visible
+        if not self.collider.isDrawn():
+            self.collider.draw(self.pg)
+    
+        # Path history of real projectile
+        hist_point1 = Point(x0, y0)
+        hist_point1.draw(self.pg)
+        hist_point1.setFill('lightgreen')
+        self.real_pathHist.append(hist_point1)
+        if len(self.real_pathHist) > 100:
+            dead = self.real_pathHist.pop(0)
+            dead.undraw()
             
-            # Visualize Velocity
-            if self.vis_vel:
-                self.vis_vel.undraw()
-            self.vis_vel = Line(
-                Origin(xh, yh),
-                Point(xh, yh),
-                Point(xh+self.xvel, yh+self.yvel))
-            self.vis_vel.draw(self.pg)
-            self.vis_vel.setFill('red')
+        # Path history of shape shadowing projectile
+        xh = self.shape.origin.getX()
+        yh = self.shape.origin.getY()
+        hist_point2 = Point(xh, yh)
+        hist_point2.setFill('blue')
+        hist_point2.draw(self.pg)
+        self.shape_pathHist.append(hist_point2)
+        if len(self.shape_pathHist) > 150:
+            dead = self.shape_pathHist.pop(0)
+            dead.undraw()
+        
+        # Visualize Velocity
+        if self.vis_vel:
+            self.vis_vel.undraw()
+        self.vis_vel = Line(
+            Origin(xh, yh),
+            Point(xh, yh),
+            Point(xh+self.xvel, yh+self.yvel))
+        self.vis_vel.draw(self.pg)
+        self.vis_vel.setFill('red')
             
     def handle_collision(self):
-        self.impact = True
+        self.collision = True
         self._handle_collision()
             
     def rotate(self, angle):
@@ -373,8 +369,8 @@ class Ship(VProjectile):
         self.rotating = False
         self.accelerating = False
      
-        # Fired state
-        self.has_fired = False
+        # Current shot
+        self.shot = None
      
         # Binds
         self.pg.master.bind('<Up>', self.acceleration)
@@ -385,7 +381,7 @@ class Ship(VProjectile):
         self.pg.master.bind('<KeyRelease-Left>', self.rotation)
         self.pg.master.bind('<Right>', self.rotation)
         self.pg.master.bind('<KeyRelease-Right>', self.rotation)
-        self.pg.master.bind('<space>', self.setFireState)
+        self.pg.master.bind('<space>', self.fire)
         
         # Stop Codes
         self.sc_accelerating = None
@@ -437,19 +433,25 @@ class Ship(VProjectile):
         self.rotating = False
         self.shape.undraw()
        
-    def setFireState(self, event):
-        self.has_fired = True
+    def getShot(self):
+        shot = self.shot
+        if shot:
+            self.shot = None
+        return shot
         
-    def fire(self):
-        fire = self.has_fired
-        if fire:
-            self.has_fired = False
-        else:
-            return fire
-        
-        return fire
+    def fire(self, event):
+        angle = self.theta*180/math.pi
+        shot = Shot(self.pg, -angle, 30, self.x, self.y)
+        self.shot = shot
         
 
+class Shot(VProjectile):
+    def __init__(self, pg, ang, vel, x, y):
+        shape = PolyCircle('center', Point(x, y), 4, 5)
+        shape.draw(pg)
+        super().__init__(pg, shape, ang, vel, x, y)
+        
+        
 class Asteroid(VProjectile):
     def __init__(self, pg, ang, vel, x, y):
         self.max_verts = 15
@@ -479,7 +481,7 @@ class Asteroid(VProjectile):
         return shape
         
     def _handle_collision(self):
-        self.max_size = 17
+        self.max_size -= 2
         self.shape.undraw()
         
         

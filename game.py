@@ -31,15 +31,19 @@ class Game(object):
         
         # Ship
         self.ship = Ship(self.pg, self.pg.center.x, self.pg.center.y)
-        self.shots = []
         
         # Asteroids
-        self.asteroids = []
         self.ast_gen_freq = 0.5 #seconds
         self.ast_last_gen_time = time.time()
         self.ast_update_i = 0
-        self.ast_max = 20
+        self.ast_max = 50
+        self.ast_count = 0
         
+        # Shots
+        self.shot_max_dist = 200
+        
+        # Object container
+        self.objects = [self.ship]
         self.remove = []
         
         # Stopcodes
@@ -49,94 +53,105 @@ class Game(object):
         
         
         # Toggle Debugging Features per object
-        #self.debug()
-        #self.ship.debug()
+        self.debug()
+        self.ship.debug()
         
         self.gl_last_endtime = time.time()
         self.start()
+        
+        
+        # Player
+        self.player = Player('AAA')
 
     def start(self):
         self.gameloop()
 
     def gameloop(self):
-        self.update_projectiles()
+        self.handle_ship_fire()
         self.check_collisions()
+        
+        # Call this before any methods that might affect undrawn objects
+        self.delete_removable()
+        
+        self.update_projectiles()
         self.handle_offscreen_objects()
         self.handle_asteroid_generation()
-        self.handle_ship_fire()
         endtime = time.time()
+        #print(round(endtime - self.gl_last_endtime, 3))
         self.gl_last_endtime = endtime
         self.pg.after(16, self.gameloop)
     
+    def delete_removable(self):
+        for object in self.remove:
+            self.objects.remove(object)
+        self.remove = []
+    
     def update_projectiles(self):
-        # Ship
-        self.ship.update(0.08)
-        if self.ship.isAccelerting():
-            self.ship.accel()
-        if self.ship.isRotating():
-            self.ship.rotate()
-        
-        # Asteroids
-        for asteroid in self.asteroids:
-            asteroid.update(0.1)
-            asteroid.rotate(1)
+        ast_count = 0
+        self.pg.master.update_idletasks()
+        for object in self.objects:
+            # Ship
+            if isinstance(object, Ship):
+                ship = object
+                if ship.isAccelerting():
+                    ship.accel()
+                if ship.isRotating():
+                    ship.rotate()
+            
+            # Asteroid
+            elif isinstance(object, Asteroid):
+                ast = object
+                ast.rotate(1)
+                ast_count += 1
                 
-        # Shots
-        for shot in self.shots:
-            shot.update(0.1)
-        
-        # BAD METHOD? Rework somehow? Probably not.
-        #if len(self.asteroids) != 0:
-        #    ast = self.asteroids[self.ast_update_i]
-        #    ast.update(1)
-        #    self.ast_update_i += 1
-        #    if self.ast_update_i == len(self.asteroids):
-        #        self.ast_update_i = 0
+            # Shot
+            elif isinstance(object, Shot):
+                shot = object
+                if shot.getDistance() > self.shot_max_dist:
+                    self.add_remove(shot)
+                    shot.shape.undraw()
+                    continue
+                
+            object.update(0.1)
+        self.ast_count = ast_count
      
     def handle_offscreen_objects(self):
         # What to do if ship escapes an edge of window
-        if self.ship.getX() > self.pg.w:
-            self.ship.move(-self.ship.getX(), 0)
-        elif self.ship.getX() < 0:
-            self.ship.move(self.pg.w, 0)
-        
-        if self.ship.getY() > self.pg.h:
-            self.ship.move(0, -self.ship.getY())
-        elif self.ship.getY() < 0:
-            self.ship.move(0, self.pg.h)
+        for object in self.objects:
+            if object.getX() > self.pg.w:
+                object.move(-object.getX(), 0)
+            elif object.getX() < 0:
+                object.move(self.pg.w, 0)
             
-        for asteroid in self.asteroids:
-            if asteroid.getX() > self.pg.w:
-                asteroid.move(-asteroid.getX(), 0)
-            elif asteroid.getX() < 0:
-                asteroid.move(self.pg.w, 0)
+            if object.getY() > self.pg.h:
+                object.move(0, -object.getY())
+            elif object.getY() < 0:
+                object.move(0, self.pg.h)
             
-            if asteroid.getY() > self.pg.h:
-                asteroid.move(0, -asteroid.getY())
-            elif asteroid.getY() < 0:
-                asteroid.move(0, self.pg.h)
-                  
-    def check_collisions(self):
-        for asteroid in self.asteroids[:]:
-            if asteroid.checkCollide(self.ship):
-                asteroid.handle_collision()
-                self.ship.handle_collision()
-                self.asteroids.remove(asteroid)
-            
-            for shot in self.shots:
-                if asteroid.checkCollide(shot):
-                    asteroid.handle_collision()
 
+    def check_collisions(self):
+        exclusions = {
+            Ship: [Shot],
+            Shot: [Ship, Shot]
+        }
+        for object in self.objects[:]:
+            for check in self.objects[:]:
+                exclude = exclusions.get(object.__class__, [])
+                if not check.__class__ in exclude and object != check:
+                    if object.checkCollide(check):
+                        object.handle_collision()
+                        self.add_remove(object)
+                        
+                    
     def handle_ship_fire(self):
         shot = self.ship.getShot()
         if shot:
-            print('HERE')
-            self.shots.append(shot)
+            self.objects.append(shot)
             
-                  
+          
     def handle_asteroid_generation(self):
         since_last_gen = time.time() - self.ast_last_gen_time
-        max_reached = len(self.asteroids) == self.ast_max
+        max_reached = self.ast_count == self.ast_max
         if since_last_gen >= self.ast_gen_freq and not max_reached:
             w = self.pg.getWidth()
             h = self.pg.getHeight()
@@ -165,11 +180,21 @@ class Game(object):
                 y = y_choices[choice]
                 x = random.randrange(0,w)
             
-            vel = random.randrange(10,15)
+            vel = random.randrange(5,30)
             ast = Asteroid(self.pg, ang, vel, x, y)
-            #ast.debug()
-            self.asteroids.append(ast)
+            
+            # Re-implement! Prevents spawning on objects
+            for object in self.objects:
+                if object.checkCollide(ast):
+                    ast.shape.undraw()
+                    return False
+                    
+            self.objects.append(ast)
             self.ast_last_gen_time = time.time()
+    
+    def add_remove(self, object):
+        if not object in self.remove:
+            self.remove.append(object)
     
     def debug(self):
         pass
@@ -191,26 +216,36 @@ class Projectile(object):
     """A projectile class that keeps track and updates a virtual projectile
     with a given amount of time"""
     def __init__(self, ang, vel, x, y):
-        self.theta = ((ang%360) * math.pi / 180)
-        self.xvel = vel * math.cos(self.theta)
-        self.yvel = vel * math.sin(self.theta)
+        self.ang = ang%360
+        theta = ang * math.pi / 180
+        self.vel = vel
+        self.xvel = vel * math.cos(theta)
+        self.yvel = vel * math.sin(theta)
         self.x = x
         self.y = y
         self.sx = x
         self.sy = y
         self.t = 0.1
         self.grav = [0,0]
+        self.distance = [0,0]
     
     def update(self, t=None):
         # Interpretor has not read self.__init__ yet (self.t not yet defined)
         if t == None:
             t = self.t
+        start = [self.x, self.y]
+            
         xvel1 = self.xvel - self.grav[0] * t
         self.x = self.x + ((self.xvel + xvel1) / 2)* t
         self.xvel = xvel1
         yvel1 = self.yvel - self.grav[1] * t
         self.y = self.y + ((self.yvel + yvel1) / 2) * t
         self.yvel = yvel1
+        
+        end = [self.x, self.y]
+        dx, dy = end[0] - start[0], end[1] - start[1]
+        self.distance[0] += dx
+        self.distance[1] += dy
         
     def setPos(self, x, y):
         self.x = x
@@ -219,6 +254,10 @@ class Projectile(object):
     def getPos(self):
         return [self.x, self.y]
        
+    def getDistance(self):
+        mag = math.sqrt(self.distance[0]**2 + self.distance[1]**2)
+        return mag
+       
     def setXVel(self, x):
         return self.xvel
         
@@ -226,16 +265,15 @@ class Projectile(object):
         return self.yvel
         
     def setVel(self, vel):
-        self.xvel = vel & math.cos(self.theta)
-        self.yvel = vel * math.sin(self.theta)
+        theta = self.ang * math.pi / 180
+        self.xvel = vel & math.cos(theta)
+        self.yvel = vel * math.sin(theta)
         
     def setAngle(self, ang):
-        self.theta = (ang * math.pi / 180) % 360
+        self.ang = ang % 360
         
     def addAngle(self, amount):
-        degrees = self.theta * 180 / math.pi
-        degrees += amount
-        self.theta = degrees * math.pi / 180        
+        self.ang = (self.ang + amount) % 360
         
     def addXVel(self, amount):
         self.xvel = self.xvel + amount
@@ -244,12 +282,13 @@ class Projectile(object):
         self.yvel = self.yvel + amount
         
     def addVel(self, amount):
-        ixvel = amount * math.cos(self.theta)
-        iyvel = amount * math.sin(self.theta)
-        
+        theta = self.ang * math.pi / 180
+        ixvel = amount * math.cos(theta)
+        iyvel = amount * math.sin(theta)
         
         self.xvel = self.xvel + ixvel
-        self.yvel = self.yvel - iyvel
+        self.yvel = self.yvel + iyvel
+        self.vel = math.sqrt(self.xvel**2 + self.yvel**2)
         
     def getX(self):
         return self.x
@@ -282,6 +321,7 @@ class VProjectile(Projectile):
         self.real_pathHist = []
         self.shape_pathHist = []
         self.vis_vel = None 
+        self.vis_ang = None
         self.vis_top_edge = None
         self.vis_right_edge = None
         self.vis_bottom_edge = None
@@ -295,48 +335,65 @@ class VProjectile(Projectile):
         self.collider.move(dx, dy)
         self.last_pos = [self.x, self.y]
     
-    # Debugging Visualizers
-    if self.debugging:
-        # Make collider visible
-        if not self.collider.isDrawn():
-            self.collider.draw(self.pg)
-    
-        # Path history of real projectile
-        hist_point1 = Point(x0, y0)
-        hist_point1.draw(self.pg)
-        hist_point1.setFill('lightgreen')
-        self.real_pathHist.append(hist_point1)
-        if len(self.real_pathHist) > 100:
-            dead = self.real_pathHist.pop(0)
-            dead.undraw()
-            
-        # Path history of shape shadowing projectile
-        xh = self.shape.origin.getX()
-        yh = self.shape.origin.getY()
-        hist_point2 = Point(xh, yh)
-        hist_point2.setFill('blue')
-        hist_point2.draw(self.pg)
-        self.shape_pathHist.append(hist_point2)
-        if len(self.shape_pathHist) > 150:
-            dead = self.shape_pathHist.pop(0)
-            dead.undraw()
+        # Debugging Visualizers
+        if self.debugging:
+            # Make collider visible
+            if not self.collider.isDrawn():
+                self.collider.draw(self.pg)
         
-        # Visualize Velocity
-        if self.vis_vel:
-            self.vis_vel.undraw()
-        self.vis_vel = Line(
-            Origin(xh, yh),
-            Point(xh, yh),
-            Point(xh+self.xvel, yh+self.yvel))
-        self.vis_vel.draw(self.pg)
-        self.vis_vel.setFill('red')
+            # Path history of real projectile
+            hist_point1 = Point(x0, y0)
+            hist_point1.draw(self.pg)
+            hist_point1.setFill('lightgreen')
+            self.real_pathHist.append(hist_point1)
+            if len(self.real_pathHist) > 50:
+                dead = self.real_pathHist.pop(0)
+                dead.undraw()
+                
+            # Path history of shape shadowing projectile
+            xh = self.shape.origin.getX()
+            yh = self.shape.origin.getY()
+            hist_point2 = Point(xh, yh)
+            hist_point2.setFill('blue')
+            hist_point2.draw(self.pg)
+            self.shape_pathHist.append(hist_point2)
+            if len(self.shape_pathHist) > 75:
+                dead = self.shape_pathHist.pop(0)
+                dead.undraw()
             
+            # Visualize Velocity
+            if self.vis_vel:
+                self.vis_vel.undraw()
+            self.vis_vel = Line(
+                Origin(xh, yh),
+                Point(xh, yh),
+                Point(xh+self.xvel, yh+self.yvel))
+            self.vis_vel.draw(self.pg)
+            self.vis_vel.setFill('red')
+            
+            # Visualize angle
+            ang = self.ang * math.pi / 180
+            ax, ay = xh + 30 *math.cos(ang), yh + 30 * math.sin(ang)
+            
+            if self.vis_ang:
+                self.vis_ang.undraw()
+            self.vis_ang = Line(
+                Origin(xh, yh),
+                Point(xh, yh),
+                Point(ax, ay))
+            self.vis_ang.draw(self.pg)
+            self.vis_ang.setFill('purple')
+               
+                
     def handle_collision(self):
-        self.collision = True
+        self.collision = True  
+            
         self._handle_collision()
             
-    def rotate(self, angle):
-        if not self.impact:
+    def rotate(self, angle=0):
+        if callable(getattr(self, '_rotate', None)):
+            self._rotate()
+        else:
             self.shape.rotate(-angle)
             self.addAngle(angle)
         
@@ -344,7 +401,8 @@ class VProjectile(Projectile):
         self.debugging = True
         
     def checkCollide(self, vproj):
-        return self.collider.checkCollide(vproj)
+        collision = self.collider.checkCollide(vproj)
+        return collision
         
     
 class Ship(VProjectile):
@@ -356,7 +414,7 @@ class Ship(VProjectile):
             Point(x+15, y),
             Point(x-8, y-8))
         shape.draw(pg)
-        super().__init__(pg, shape, 0, 0, x, y)
+        super().__init__(pg, shape, 0, 0, shape.center.x, shape.center.y)
         
         # Base Attributes
         self.max_accel = 100
@@ -401,7 +459,6 @@ class Ship(VProjectile):
                 self.dir_accel = -self.inc_accel
                 self.accelerating = True
 
-        
     def accel(self):
         super().addVel(self.dir_accel)
         
@@ -416,22 +473,23 @@ class Ship(VProjectile):
                 
         if not self.rotating:
             if event.keysym == 'Right':
-                self.dir_rotate = self.inc_rotate
-                self.rotating = True
-            elif event.keysym == 'Left':
                 self.dir_rotate = -self.inc_rotate
                 self.rotating = True
+            elif event.keysym == 'Left':
+                self.dir_rotate = self.inc_rotate
+                self.rotating = True
     
-    def rotate(self):
-        super().rotate(self.dir_rotate)
+    def _rotate(self):
+        self.shape.rotate(self.dir_rotate)
+        self.addAngle(self.dir_rotate)
 
     def isRotating(self):
         return self.rotating
         
     def _handle_collision(self):
+        self.shape.undraw()
         self.accelerating = False
         self.rotating = False
-        self.shape.undraw()
        
     def getShot(self):
         shot = self.shot
@@ -440,21 +498,33 @@ class Ship(VProjectile):
         return shot
         
     def fire(self, event):
-        angle = self.theta*180/math.pi
-        shot = Shot(self.pg, -angle, 30, self.x, self.y)
+        angle = self.ang
+        shot = Shot(self.pg, self)
         self.shot = shot
         
 
 class Shot(VProjectile):
-    def __init__(self, pg, ang, vel, x, y):
-        shape = PolyCircle('center', Point(x, y), 4, 5)
+    def __init__(self, pg, ship):
+        self.ship = ship
+        x = ship.getX()
+        y = ship.getY()
+        vel = ship.vel
+        ang = ship.ang
+        shape = PolyCircle('center', Point(x, y), 1, 3)
         shape.draw(pg)
-        super().__init__(pg, shape, ang, vel, x, y)
+        super().__init__(pg, shape, ang, 0, x, y)
+        self.xvel = ship.xvel
+        self.yvel = ship.yvel
+        self.addVel(100)
+        
+    def _handle_collision(self):
+        self.shape.undraw()
+        pass
         
         
 class Asteroid(VProjectile):
     def __init__(self, pg, ang, vel, x, y):
-        self.max_verts = 15
+        self.max_verts = 10
         self.max_size = 40
         shape = self._genShape(x, y)
         shape.draw(pg)
@@ -465,12 +535,12 @@ class Asteroid(VProjectile):
         size = random.randrange(10, self.max_size + 1)
         per = 360 // verts
         points = []
-        for i in range(360):
+        for i in range(1,361):
             theta = i * math.pi / 180
             xmag = size * math.cos(theta)
             ymag = size * math.sin(theta)
-            xmag += random.random() * 10 
-            ymag += random.random() * 10
+            xmag += random.random() * 5
+            ymag += random.random() * 5
             px = xmag + x
             py = ymag + y
             
@@ -481,8 +551,8 @@ class Asteroid(VProjectile):
         return shape
         
     def _handle_collision(self):
-        self.max_size -= 2
         self.shape.undraw()
+        self.max_size -= 2
         
         
         
@@ -496,16 +566,47 @@ class CollisionBox(Polygon):
     def checkCollide(self, vproj):
         if not isinstance(vproj.collider, CollisionBox):
             raise(CollisionError, COLLIDERS_INCOMPATIBLE)
-            
         check = vproj.collider
-        wh, hh = self.w / 2, self.h / 2
-        c = self.center
-        for point in check.getPoints():
-            if point.x <= c.x + wh and point.x >= c.x - wh:
-                if point.y <= c.y + hh and point.y >= c.y - hh:
-                    return True
-        return False
+        
+        shw, shh = self.w / 2, self.h / 2
+        chw, chh = check.w / 2, check.h / 2
+        sc = self.center
+        cc = check.center
+        
+        cRight = cc.x + chw
+        cLeft = cc.x - chw
+        cTop = cc.y + chh
+        cBot = cc.y - chh
+        
+        sRight = sc.x + shw
+        sLeft = sc.x - shw
+        sTop = sc.y + shh
+        sBot = sc.y - shh
+        happened = []
+        # Top
+        if sTop > cBot and sBot < cBot:
+            if cLeft < sRight and cRight > sLeft:
+                return True
+        # Bot
+        if sBot < cTop and sTop > cTop:
+            if cLeft < sRight and cRight > sLeft:
+                return True
+                
+        # Left
+        if sLeft < cRight and sRight > cRight:
+            if cTop > sBot and cBot < sTop:
+                return True
+        
+        # Right
+        if sRight > cLeft and sLeft < cLeft:
+            if cTop > sBot and cBot < sTop:
+                return True
 
+        # Check if inside
+        if sRight < cRight and sLeft > cLeft and sTop < cTop and sBot > cBot:
+            return True
+            
+        return False
         
     def _getOtherPoints(self, p1, p2):
         p3x, p3y, p4x, p4y = 0, 0, 0, 0
@@ -556,6 +657,7 @@ def genCollisionBox(shape):
     cx = lowx + (highx - lowx) / 2
     cy = lowy + (highy - lowy) / 2
     return CollisionBox(Origin(cx, cy), Point(lowx, lowy), Point(highx, highy))
+     
      
 def main():
     root = Root('TKasteroids')

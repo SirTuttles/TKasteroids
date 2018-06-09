@@ -97,7 +97,7 @@ class PixelGrid(tk.Canvas):
         self.trans = Transform(self.w, self.h, xlow, ylow, xhigh, yhigh)
         
     def move(self, shape, dx, dy):
-        tk.Canvas.move(self, shape, dx, dy)
+        super().move(shape, dx, dy)
 
     def getWidth(self):
         return self.w
@@ -211,7 +211,7 @@ class GraphicsObject(object):
         pg = self.pg
         if pg:
             origin = self.origin
-            theta = angle * math.pi / 180 
+            theta = (angle%360) * math.pi / 180 
             
             new_coords = []
             new_points = []
@@ -240,7 +240,9 @@ class GraphicsObject(object):
     def setFill(self, color):
         self._reconfig('fill', color)
  
- 
+    def setOutline(self, color):
+        self._reconfig('outline', color)
+    
     def resize(self, percentage):
         
         pass
@@ -316,7 +318,7 @@ class Origin(Point):
     
     def _draw(self, pg, options):
         x, y = pg.toScreen(self.x, self.y)
-        return pg.create_oval(x-5, y-5, x+5, y+5, outline='red')
+        return pg.create_oval(x-5, y-5, x+5, y+5, options)
   
   
 class _BBox(GraphicsObject):
@@ -370,7 +372,9 @@ class Rectangle(_BBox):
        
 class Line(_BBox):
     def __init__(self, origin, p1, p2):
-        super().__init__(origin, p1, p2, ["arrow","fill","width"])
+        super().__init__(origin, p1, p2, ['arrow', 'fill', 'width'])
+        self.setFill(DEFAULT_CONFIG['outline'])
+        self.setOutline = self.setFill
         
     def _draw(self, pg, options):
         p1 = self.points[0]
@@ -380,7 +384,37 @@ class Line(_BBox):
         
         return pg.create_line(x1, y1, x2, y2, options)
        
+      
+class Text(GraphicsObject):
+    def __init__(self, origin, p, text):
+        super().__init__(['text', 'fill', 'font'])
+        self.setText(text)
+        self.points = [p]
+        self.text = text
+    
+    def _draw(self, pg, options):
+        x, y = pg.toScreen(self.points[0].x, self.points[0].y)
+        self.setFill('white')
+        return pg.create_text(x, y, options)
+
+    def _move(self, dx, dy):
+        self.points[0].x += dx
+        self.points[0].y += dy
+        
+    def setText(self, text):
+        self._reconfig('text', text)
        
+    def setSize(self, size):
+        f, s, b = self.config['font']
+        s = size
+        self._reconfig('font', [f,s,b])
+       
+    def setFont(self, font):
+        f, s, b = self.config['font']
+        f = font
+        self._reconfig('font', [f, s, b])
+    
+    
 class Oval(_BBox):
     def __init__(self, origin, p1, p2):
         super().__init__(origin, p1, p2)
@@ -500,6 +534,11 @@ class ExampleApp(object):
         self.polycirc5.origin.draw(self.pg)
         self.polycirc5.draw(self.pg)
         
+        # Text
+        self.txt1 = Text('center', Point(40, 10), 'hello world')
+        self.txt1.draw(self.pg)
+        self.txt1.setFont('calibri')
+        self.txt1.setSize(10)
         self.rot_inc = 0.1
         self.mov_xinc = 0.5
         self.mov_yinc = 0.5

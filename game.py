@@ -24,7 +24,6 @@ class Game(object):
         self.pg.pack(fill='both', expand=1)
         
         # Backend statistics
-        self.fps = 0
         self.gl_exec_time = 0
         
         # Blackholes
@@ -34,10 +33,10 @@ class Game(object):
         self.bh_count = 0
         
         # Asteroids
-        self.ast_gen_freq = 0.5 #seconds
+        self.ast_gen_freq = 0.1 #seconds
         self.ast_last_gen_time = time.time()
         self.ast_update_i = 0
-        self.ast_max = 20
+        self.ast_max = 5
         self.ast_count = 0
         
         # Shots
@@ -45,6 +44,7 @@ class Game(object):
         
         # Object container
         self.objects = []
+        self.new_object_queue = []
         self.remove = []
         
         # Stopcodes
@@ -94,11 +94,13 @@ class Game(object):
         
     def gameloop(self):
         self.sc_gameloop = self.pg.after(16, self.gameloop)
+        self.master.update_idletasks()
         self.handle_ship_fire()
         self.check_collisions()
         
         # Call this before any methods that might affect undrawn objects
         self.delete_removable()
+        self.handle_new_objects()
         
         self.update_projectiles()
         self.handle_offscreen_objects()
@@ -106,10 +108,10 @@ class Game(object):
         self.handle_blackhole_generation()
         self.updatePlayerScore()
         self.updatePlayerLives()
-        endtime = time.time()
-        #print(round(endtime - self.gl_last_endtime, 3))
-        self.gl_last_endtime = endtime
         self.handle_gameOver()
+        endtime = time.time()
+        #print((endtime - self.gl_last_endtime))
+        self.gl_last_endtime = endtime
         
     def checkGameOver(self):
         if self.player.getLives() < 0:
@@ -145,8 +147,12 @@ class Game(object):
         self.remove = []
     
     def update_projectiles(self):
-        self.pg.master.update_idletasks()
         for object in self.objects:
+            if object.getMaxLifetime():
+                if object.getMaxLifetime() <= object.getLifetime():
+                    self.add_remove(object)
+                    continue
+            
             # Ship
             if isinstance(object, Ship):
                 ship = object
@@ -167,6 +173,7 @@ class Game(object):
                     self.add_remove(shot)
                     shot.shape.undraw()
                     continue
+                    
                 
             object.update(0.1)
     
@@ -180,7 +187,7 @@ class Game(object):
                 self.game_over_title = Text(Origin(c.x, c.y), c, text)
                 self.game_over_title.draw(self.pg)
                 self.game_over_title.setSize(56)
-                self.game_over_title.setFont('courier new')
+                self.game_over_title.setFont('courier')
              
             if time.time() - self.game_over_time >= self.time_to_reset:
                 if self.game_over_title:
@@ -190,7 +197,12 @@ class Game(object):
                 self.add_remove_all()
                 self.pg.after_cancel(self.sc_gameloop)
                 self.start()
-    
+                
+    def handle_new_objects(self):
+        for object in self.new_object_queue[:]:
+            self.objects.append(object)
+            self.new_object_queue.remove(object)
+            
     def handle_offscreen_objects(self):
         # What to do if ship escapes an edge of window
         for object in self.objects:
@@ -210,7 +222,11 @@ class Game(object):
             Shot: [Ship, Shot]
         }
         for object in self.objects[:]:
+            if not hasattr(object, 'collider'):
+                continue
             for check in self.objects[:]:
+                if not hasattr(check, 'collider'):
+                    continue
                 exclude = exclusions.get(object.__class__, [])
                 if not check.__class__ in exclude and object != check:
                     if object.checkCollide(check):
@@ -235,6 +251,7 @@ class Game(object):
         elif object.__class__ == Ship:
             ship = object
             if check.__class__ == Asteroid:
+                self.explosion(ship.getX(), ship.getY(), 5)
                 self.add_remove(ship)
                 self.ship.undraw()
                 self.player.addLives(-1)
@@ -249,14 +266,25 @@ class Game(object):
         elif object.__class__ == Asteroid:
             ast = object
             if check.__class__ == Shot:
+                self.explosion(ast.getX(), ast.getY(), 3)
                 self.add_remove(ast)
                 ast.undraw()
+                if ast.isBreakable():
+                    self.append_new_object(ast.break_apart())
+                    
             elif check.__class__ == Ship:
+                self.explosion(ast.getX(), ast.getY(), 3)
                 self.add_remove(ast)
                 ast.undraw()
+                if ast.isBreakable():
+                    self.append_new_object(ast.break_apart())
+                    
             elif check.__class__ == Asteroid:
+                self.explosion(ast.getX(), ast.getY(), 3)
                 self.add_remove(ast)
                 ast.undraw()
+                if ast.isBreakable():
+                    self.append_new_object(ast.break_apart())
                 
         elif object.__class__ == BlackHole:
             bh = object
@@ -264,7 +292,12 @@ class Game(object):
             if check.__class__ == BlackHole:
                 pass
         
-          
+       
+    def explosion(self, x, y, density):
+        for i in range(density):
+            p = Particle(self.pg, x, y)
+            self.objects.append(p)
+       
     def handle_blackhole_generation(self):
         since_last_gen = time.time() - self.bh_last_gen_time
         max_reached = self.bh_count == self.bh_max
@@ -314,12 +347,14 @@ class Game(object):
             ast = Asteroid(self.pg, ang, vel, x, y)
             
             # Re-implement! Prevents spawning on objects
-            for object in self.objects:
-                if object.checkCollide(ast):
-                    ast.shape.undraw()
-                    return False
+            #for object in self.objects:
+            #    if not hasattr(object, 'collider'):
+            #        continue
+            #    if object.checkCollide(ast):
+            #        ast.shape.undraw()
+            #        return False
                
-            self.objects.append(ast)
+            self.append_new_object(ast)
             self.ast_count += 1
             self.ast_last_gen_time = time.time()
     
@@ -343,7 +378,14 @@ class Game(object):
         
     def add_remove_all(self):
         for object in self.objects:
-            self.remove.append(object)
+            self.add_remove(object)
+            
+    def append_new_object(self, object):
+        if isinstance(object, [].__class__):
+            for item in object:
+                self.new_object_queue.append(item)
+        else:
+            self.new_object_queue.append(object)
         
 
 class Player(object):
@@ -387,6 +429,9 @@ class Projectile(object):
         self.grav = [0,0]
         self.original_grav = self.grav
         self.distance = [0,0]
+        self.lifetime = 0
+        self.last_time_check = time.time()
+        self.max_lifetime = None
     
     def update(self, t=None):
         # Interpretor has not read self.__init__ yet (self.t not yet defined)
@@ -407,6 +452,9 @@ class Projectile(object):
         dx, dy = end[0] - start[0], end[1] - start[1]
         self.distance[0] += dx
         self.distance[1] += dy
+        
+        self.lifetime += time.time() - self.last_time_check
+        self.last_time_check = time.time()
         
     def setPos(self, x, y):
         self.x = x
@@ -474,6 +522,12 @@ class Projectile(object):
         self.x += dx
         self.y += dy
        
+    def getLifetime(self):
+        return self.lifetime
+        
+    def getMaxLifetime(self):
+        return self.max_lifetime
+       
        
 class VProjectile(Projectile):
     def __init__(self, pg, shape, ang, vel, x, y):
@@ -483,6 +537,7 @@ class VProjectile(Projectile):
         self.collider = genCollisionBox(shape)
         self.last_pos = [x, y]
         self.collision = False
+        self.undrawn = False
         
         self.debugging = False
         # Debugging attributes
@@ -497,6 +552,7 @@ class VProjectile(Projectile):
         
     def undraw(self):
         self.shape.undraw()
+        self.undrawn = True
         
     def update(self, t=None):
         super().update(t)
@@ -563,6 +619,9 @@ class VProjectile(Projectile):
     def handle_collision(self, check):
         self.collision = True  
         self._handle_collision(check)
+            
+    def _handle_collision(self, check):
+        pass
             
     def rotate(self, angle=None):
         if callable(getattr(self, '_rotate', None)):
@@ -684,7 +743,7 @@ class Ship(VProjectile):
         self.pg.master.unbind('<space>')
 
     def _update(self):
-        print(self.vel)
+        pass
     
         
 class Shot(VProjectile):
@@ -706,16 +765,18 @@ class Shot(VProjectile):
         
         
 class Asteroid(VProjectile):
-    def __init__(self, pg, ang, vel, x, y):
+    def __init__(self, pg, ang, vel, x, y, min_size = 10, max_size=40):
         self.max_verts = 10
-        self.max_size = 40
+        self.max_size = max_size
+        self.min_size = min_size
+        self.breakable = True
         shape = self._genShape(x, y)
         shape.draw(pg)
         super().__init__(pg, shape, ang, vel, x, y)
         
     def _genShape(self, x, y):
         verts = random.randrange(7, self.max_verts + 1)
-        size = random.randrange(10, self.max_size + 1)
+        size = random.randrange(self.min_size, self.max_size + 1)
         self.size = size
         per = 360 // verts
         points = []
@@ -731,11 +792,36 @@ class Asteroid(VProjectile):
             if i % per == 0:
                 points.append(Point(px, py))
         
+        # If too small, not breakable        
+        if self.size <= 30:
+            self.breakable = False
         shape = Polygon('center', *points)
         return shape
         
+    def getSize(self):
+        return self.size
+     
+    def isBreakable(self):
+        return self.breakable
+    
+    def break_apart(self):
+        new = []
+        span = 360 / 3
+        for i in range(3):
+            sang = (i * span) * math.pi / 180
+            x = self.x + self.size * math.cos(sang)
+            y = self.y + self.size * math.sin(sang)
+            
+            ang = random.randrange(1,361)
+            vel = random.randrange(3,15)
+            ast = Asteroid(self.pg, ang, vel, x, y, int(self.min_size*0.3) , (self.max_size*0.3))
+            ast.breakable = False
+            new.append(ast)
+   
+        return new
+     
     def _handle_collision(self, check):
-        self.max_size -= 2
+        pass
         
     def _update(self):
         self.rotate(1)
@@ -885,6 +971,22 @@ def genCollisionBox(shape):
     cx = lowx + (highx - lowx) / 2
     cy = lowy + (highy - lowy) / 2
     return CollisionBox(Origin(cx, cy), Point(lowx, lowy), Point(highx, highy))
+                
+     
+class Particle(VProjectile):
+    def __init__(self, pg, x, y):
+        ang = random.randrange(1,361)
+        vel = random.randrange(1,30)
+        self.rotby = random.randrange(1, 15)
+        length = random.randrange(1,10)
+        shape = Line('center', Point(x, y), Point(x+length, y+length))
+        shape.draw(pg)
+        shape.setOutline('white')
+        super().__init__(pg, shape, ang, vel, shape.center.x, shape.center.y)
+        self.max_lifetime = 0.5 # seconds
+        
+    def _update(self):
+        self.rotate(self.rotby)
      
      
 def main():

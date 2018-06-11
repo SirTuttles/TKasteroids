@@ -22,7 +22,7 @@ DRAWN_ON_CLOSED = "Cannot draw on a closed window"
 INVALID_CONFIG_OPTION = "Attempted to use invalid config option"
 
 class Root(tk.Tk):
-    def __init__(self, title='Root', width=800, height=600, **options):
+    def __init__(self, title='Root', width=640, height=480, **options):
         super().__init__(*options)
         self.title(title)
         self.geometry('%sx%s' % (width, height))
@@ -38,7 +38,7 @@ class Root(tk.Tk):
         
         
 class Window(tk.Tk):
-    def __init__(self, title='Window', width=800, height=600, **options):
+    def __init__(self, title='Window', width=640, height=480, **options):
         super().__init__(*options)
 
 
@@ -68,7 +68,7 @@ class PixelGrid(tk.Canvas):
     """A tkinter.Canvas() that has been abstracted supplied with various
     helpful methods."""
     
-    def __init__(self, master, width=800, height=600):
+    def __init__(self, master, width=640, height=480):
         
         tk.Canvas.__init__(self, master, width=width, height=height)
         self.master = master
@@ -372,10 +372,15 @@ class Rectangle(_BBox):
        
 class Line(_BBox):
     def __init__(self, origin, p1, p2):
-        super().__init__(origin, p1, p2, ['arrow', 'fill', 'width'])
+        super().__init__(origin, p1, p2, ['fill', 'width'])
         self.setFill(DEFAULT_CONFIG['outline'])
         self.setOutline = self.setFill
-        
+        self.center = self.findCenter()
+        if origin == 'center':
+            self.origin = self.center.clone()
+        else:
+            self.origin = origin
+            
     def _draw(self, pg, options):
         p1 = self.points[0]
         p2 = self.points[1]

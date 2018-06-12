@@ -36,7 +36,7 @@ class Game(object):
         self.ast_gen_freq = 0.1 #seconds
         self.ast_last_gen_time = time.time()
         self.ast_update_i = 0
-        self.ast_max = 5
+        self.ast_max = 20
         self.ast_count = 0
         
         # Shots
@@ -82,7 +82,7 @@ class Game(object):
         # Ship
         self.ship = Ship(self.pg, self.pg.center.x, self.pg.center.y)
         self.ship.rotate(90)
-        self.objects.append(self.ship)
+        self.append_new_object(self.ship)
         self.bind_ship()
         self.player.setLives(3)
         self.gameloop()
@@ -200,6 +200,11 @@ class Game(object):
                 
     def handle_new_objects(self):
         for object in self.new_object_queue[:]:
+            if isinstance(object, Asteroid):
+                self.ast_count +=1
+            elif isinstance(object, BlackHole):
+                self.bh_count +=1
+                
             self.objects.append(object)
             self.new_object_queue.remove(object)
             
@@ -235,7 +240,7 @@ class Game(object):
     def handle_ship_fire(self):
         shot = self.ship.getShot()
         if shot:
-            self.objects.append(shot)
+            self.append_new_object(shot)
           
     def handle_collision(self, object, check):
         # Handle object specific collision things
@@ -259,7 +264,7 @@ class Game(object):
                     self.ship = Ship(self.pg, self.pg.center.x, self.pg.center.y)
                     self.ship.rotate(90)
                     self.bind_ship()
-                    self.objects.append(self.ship)
+                    self.append_new_object(self.ship)
             elif check.__class__ == BlackHole:
                 pass
 
@@ -288,7 +293,6 @@ class Game(object):
                 
         elif object.__class__ == BlackHole:
             bh = object
-            bh.collider.setOutline('red')
             if check.__class__ == BlackHole:
                 pass
         
@@ -296,11 +300,11 @@ class Game(object):
     def explosion(self, x, y, density):
         for i in range(density):
             p = Particle(self.pg, x, y)
-            self.objects.append(p)
+            self.append_new_object(p)
        
     def handle_blackhole_generation(self):
         since_last_gen = time.time() - self.bh_last_gen_time
-        max_reached = self.bh_count == self.bh_max
+        max_reached = self.bh_count >= self.bh_max
         
         w = self.pg.getWidth()
         h = self.pg.getHeight()
@@ -308,13 +312,12 @@ class Game(object):
         py = random.randrange(1, h)
         if since_last_gen >= self.bh_gen_freq and not max_reached:
             blackhole = BlackHole(self.pg, px, py)
-            self.objects.append(blackhole)
+            self.append_new_object(blackhole)
             self.bh_last_gen_time = time.time()
-            self.bh_count += 1
           
     def handle_asteroid_generation(self):
         since_last_gen = time.time() - self.ast_last_gen_time
-        max_reached = self.ast_count == self.ast_max
+        max_reached = self.ast_count >= self.ast_max
         if since_last_gen >= self.ast_gen_freq and not max_reached:
             w = self.pg.getWidth()
             h = self.pg.getHeight()
@@ -347,15 +350,14 @@ class Game(object):
             ast = Asteroid(self.pg, ang, vel, x, y)
             
             # Re-implement! Prevents spawning on objects
-            #for object in self.objects:
-            #    if not hasattr(object, 'collider'):
-            #        continue
-            #    if object.checkCollide(ast):
-            #        ast.shape.undraw()
-            #        return False
+            for object in self.objects:
+                if not hasattr(object, 'collider'):
+                    continue
+                if object.checkCollide(ast):
+                    ast.shape.undraw()
+                    return False
                
             self.append_new_object(ast)
-            self.ast_count += 1
             self.ast_last_gen_time = time.time()
     
     def bind_ship(self):
@@ -549,9 +551,29 @@ class VProjectile(Projectile):
         self.vis_right_edge = None
         self.vis_bottom_edge = None
         self.vis_left_edge = None
+        self.vis_ang = None
         
     def undraw(self):
         self.shape.undraw()
+        if self.debugging:
+            self.collider.undraw()
+            if self.vis_vel:
+                self.vis_vel.undraw()
+            if self.vis_top_edge:
+                self.vis_top_edge.undraw()
+            if self.vis_right_edge:    
+                self.vis_right_edge.undraw()
+            if self.vis_bottom_edge:
+                self.vis_bottom_edge.undraw()
+            if self.vis_left_edge:
+                self.vis_left_edge.undraw()
+            if self.vis_ang:
+                self.vis_ang.undraw()
+            for hist in self.real_pathHist:
+                hist.undraw()
+            for hist in self.shape_pathHist:
+                hist.undraw()
+                
         self.undrawn = True
         
     def update(self, t=None):
@@ -577,7 +599,7 @@ class VProjectile(Projectile):
             hist_point1.draw(self.pg)
             hist_point1.setFill('lightgreen')
             self.real_pathHist.append(hist_point1)
-            if len(self.real_pathHist) > 50:
+            if len(self.real_pathHist) > 20:
                 dead = self.real_pathHist.pop(0)
                 dead.undraw()
                 
@@ -588,7 +610,7 @@ class VProjectile(Projectile):
             hist_point2.setFill('blue')
             hist_point2.draw(self.pg)
             self.shape_pathHist.append(hist_point2)
-            if len(self.shape_pathHist) > 75:
+            if len(self.shape_pathHist) > 20:
                 dead = self.shape_pathHist.pop(0)
                 dead.undraw()
             
@@ -617,6 +639,8 @@ class VProjectile(Projectile):
                
                 
     def handle_collision(self, check):
+        if self.debugging:
+            self.collider.setOutline('red')
         self.collision = True  
         self._handle_collision(check)
             
@@ -814,7 +838,7 @@ class Asteroid(VProjectile):
             
             ang = random.randrange(1,361)
             vel = random.randrange(3,15)
-            ast = Asteroid(self.pg, ang, vel, x, y, int(self.min_size*0.3) , (self.max_size*0.3))
+            ast = Asteroid(self.pg, ang, vel, x, y, int(self.min_size*0.3) , (self.max_size*0.4))
             ast.breakable = False
             new.append(ast)
    
@@ -918,7 +942,7 @@ class BlackHole(VProjectile):
         super().__init__(pg, shape, ang, vel, x, y)
         self.inside = []
         
-    def _handle_collision(self, check):
+    def _handle_collision(self, check):  
         dx, dy = self.getX() - check.getX(), self.getY() - check.getY()
         if dx == 0:
             angle = 0
@@ -938,14 +962,21 @@ class BlackHole(VProjectile):
             
         gx = rx - dx
         gy = ry - dy
-        self.inside.append(check)
+        if not check in self.inside:
+            self.inside.append(check)
         check.setGravity(gx*0.1, gy*0.1)
         
     def _update(self):
+        if self.debugging:
+            if len(self.inside) == 0:
+                self.collider.setOutline('white')
         self.rotate(1)
         for item in self.inside[:]:
             if not self.checkCollide(item):
                 item.setGravity(0,0)
+                
+                # Object no longer colliding with blackhole
+                item.collider.setOutline('white')
                 self.inside.remove(item)
     
         
@@ -978,7 +1009,7 @@ class Particle(VProjectile):
         ang = random.randrange(1,361)
         vel = random.randrange(1,30)
         self.rotby = random.randrange(1, 15)
-        length = random.randrange(1,10)
+        length = random.randrange(1,5)
         shape = Line('center', Point(x, y), Point(x+length, y+length))
         shape.draw(pg)
         shape.setOutline('white')
@@ -986,6 +1017,7 @@ class Particle(VProjectile):
         self.max_lifetime = 0.5 # seconds
         
     def _update(self):
+        pass
         self.rotate(self.rotby)
      
      

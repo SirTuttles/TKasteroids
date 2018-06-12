@@ -1,2 +1,0 @@
-# TKasteroids
-Asteroids via Tkinter

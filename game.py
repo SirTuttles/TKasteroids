@@ -187,7 +187,7 @@ class Game(object):
                 self.game_over_title = Text(Origin(c.x, c.y), c, text)
                 self.game_over_title.draw(self.pg)
                 self.game_over_title.setSize(56)
-                self.game_over_title.setFont('courier')
+                self.game_over_title.setFont('courier new')
              
             if time.time() - self.game_over_time >= self.time_to_reset:
                 if self.game_over_title:
@@ -361,6 +361,7 @@ class Game(object):
             self.ast_last_gen_time = time.time()
     
     def bind_ship(self):
+        # Keys
         self.pg.master.bind('<Up>', self.ship.acceleration)
         self.pg.master.bind('<KeyRelease-Up>', self.ship.acceleration)
         self.pg.master.bind('<Down>', self.ship.acceleration)
@@ -370,7 +371,7 @@ class Game(object):
         self.pg.master.bind('<Right>', self.ship.rotation)
         self.pg.master.bind('<KeyRelease-Right>', self.ship.rotation)
         self.pg.master.bind('<space>', self.ship.fire)
-            
+
     def add_remove(self, object):
         if not object in self.remove:
             self.remove.append(object)
@@ -541,7 +542,7 @@ class VProjectile(Projectile):
         self.collision = False
         self.undrawn = False
         
-        self.debugging = False
+        self.debugging = True
         # Debugging attributes
         self.real_pathHist = []
         self.shape_pathHist = []

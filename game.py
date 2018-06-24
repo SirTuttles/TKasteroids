@@ -542,7 +542,7 @@ class VProjectile(Projectile):
         self.collision = False
         self.undrawn = False
         
-        self.debugging = True
+        self.debugging = False
         # Debugging attributes
         self.real_pathHist = []
         self.shape_pathHist = []

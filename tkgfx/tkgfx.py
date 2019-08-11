@@ -7,7 +7,7 @@ __version__ = "1.0.0"
 
 import tkinter as tk
 import time
-
+import math
 
 class Vect2D(object):
     """Basic 2 dimensional vector class."""
@@ -30,10 +30,37 @@ class Vect2D(object):
             return Vect2D(nx, ny)
         except Exception as e:
             raise ValueError("Vect2D given bad argument", e)
-           
+    
+    def __mult__(self, b):
+        pass
+
+
     def __str__(self):
         return str([self.x, self.y])
 
+class Matrix2x2(object):
+    def __init__(self):
+        self.vals = self._set_vals()
+
+    def rotation(self, deg):
+        pass
+
+    def _set_vals(self):
+        vals = []
+        for x in range(2):
+            vals.append([])
+            for y in range(2):
+                vals[x].append(0)
+        print(vals)
+        return vals
+
+    def __str__(self):
+        vis = ""
+        for x in self.vals:
+            vis += "|"str(x[0])
+            vis += "," + str(x[1])
+            vis += '|\n'
+        return vis
 
 class Transform(object):
     def __init__(self, width, height):
@@ -147,6 +174,7 @@ class GOB(object):
         pass
 
     def rotate(self, angle):
+
         self._rotate()
 
     def _rotate(self, angle):
@@ -181,7 +209,7 @@ class GOB(object):
 class Point(GOB):
     def __init__(self, gwin, vect, **kw):
         super(Point, self).__init__(gwin, **kw)
-        self.vects.extend(vect, Vect2D(vect.x+1, vect.y+1))
+        self.vects.extend([vect, Vect2D(vect.x+1, vect.y+1)])
 
     def _draw(self):
         canv = self.gwin.canvas
@@ -236,11 +264,14 @@ class Circle(_BBox):
 def main():
     gwin = GWin()
     gwin.setTransOriginCenter()
-    circ = Circle(gwin, Vect2D(0,0), 20, fill = "white")
-    rec = Rectangle(gwin, Vect2D(0,0), Vect2D(50,50), fill = "white")
-    rec.draw()
-    gwin.setTransYFlip()
-    circ.draw()
+    r = 200
+    for i in range(360):
+        x = math.cos(i) * r
+        y = math.sin(i) * r
+        p = Point(gwin, Vect2D(x,y), fill="white")
+        p.draw()
+    mm = Matrix2x2()
+    print(mm)
     gwin.run()
 
 if __name__ == "__main__":

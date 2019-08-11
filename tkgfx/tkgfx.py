@@ -62,25 +62,23 @@ class GOB(object):
         self.vects = []
         self.origin = None
         self.center = None
-        self.is_drawn = False
-
 
     def draw(self):
         if self.origin == None:
             self._gen_origin()
-        self._create_canv_obj()
+        self._draw()
         self.config(**self.options)
         self.is_drawn = True
 
     def undraw(self):
-        self._remove_canv_obj()
-        self.is_drawn = False
+        self._undraw()
+        self.id = -1
 
-    def _create_canv_obj(self):
+    def _draw(self):
         # Override me in subclass
         pass
 
-    def _remove_canv_obj(self):
+    def _undraw(self):
         # Override me in subclass
         pass
 
@@ -96,7 +94,12 @@ class GOB(object):
             
     
     def move(self, dx, dy):
-        self._move()
+        canv = self.gwin.canvas
+        for v in self.vects:
+            v.x += dx
+            v.y += dy
+        canv.coords(self.id, *self._unpack_vects())
+        self._move(dx, dy)
     
     def _move(self, dx, dy):
         # Override me in subclass
@@ -121,12 +124,18 @@ class GOB(object):
         Also defines object's \"center.\" """
         pass
 
+    def _unpack_vects(self):
+        unp = []
+        for v in self.vects:
+            unp.extend([v.x, v.y])
+        return unp
+
 class Point(GOB):
     def __init__(self, gwin, vect, **kw):
         super(Point, self).__init__(gwin, **kw)
         self.vects.append(vect)
 
-    def _create_canv_obj(self):
+    def _draw(self):
         canv = self.gwin.canvas
         x1 = self.vects[0].x
         y1 = self.vects[0].y
@@ -134,16 +143,18 @@ class Point(GOB):
         y2 = y1+1
         self.id = canv.create_line(x1,y1,x2,y2)
 
+
 class Line(GOB):
     def __init__(self, gwin, v1, v2, **kw):
         super(Line, self).__init__(gwin, **kw)
         self.vects.extend([v1, v2])
         
-    def _create_canv_obj(self):
+    def _draw(self):
         canv = self.gwin.canvas
         v1 = self.vects[0]
         v2 = self.vects[1]
         self.id = canv.create_line(v1.x, v1.y, v2.x, v2.y)
+
 
 class _BBox(GOB):
     def __init__(self, gwin, v1, v2, **kw):
@@ -151,14 +162,21 @@ class _BBox(GOB):
         self.vects.extend([v1,v2])
 
 class Rectangle(_BBox):
-    def _create_canv_obj(self):
+    def _draw(self):
         canv = self.gwin.canvas
         v1 = self.vects[0]
         v2 = self.vects[1]
         self.id = canv.create_rectangle(v1.x, v1.y, v2.x, v2.y)
 
+class Circle(_BBox):
+    def _draw(self):
+        canv
+
 def main():
     gwin = GWin()
+    rec = Line(gwin, Vect2D(0,0), Vect2D(60,60), fill = "white")
+    rec.draw()
+    rec.move(0,50)
     gwin.run()
 
 if __name__ == "__main__":

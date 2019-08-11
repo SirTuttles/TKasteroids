@@ -47,7 +47,7 @@ class Transform(object):
         elif self.auto_setting == 1:
             self.y_flip(vec)
         elif self.auto_setting == 2:
-            self.origin_centered(vec)
+            self.origin_center(vec)
 
     def screen(self, vec):
         pass
@@ -55,7 +55,7 @@ class Transform(object):
     def y_flip(self, vec):
         vec.y = self.y_max - vec.y
 
-    def origin_centered(self, vec):
+    def origin_center(self, vec):
         cx = self.x_max / 2
         cy = self.y_max / 2
         vec.x += cx
@@ -75,7 +75,7 @@ class GWin(object):
         self.canvas = tk.Canvas(self.root, width=width, height=height)
         self.gobcont = []
         self.transform = Transform(width, height)
-        self.transform.auto_setting = 2
+        self.transform.auto_setting = 0
 
         # setup canvas
         self.canvas.pack()
@@ -83,6 +83,15 @@ class GWin(object):
 
     def run(self):
         self.root.mainloop()
+
+    def setTransScreen(self):
+        self.transform.auto_setting = 0
+
+    def setTransYFlip(self):
+        self.transform.auto_setting = 1
+
+    def setTransOriginCenter(self):
+        self.transform.auto_setting = 2
 
 
 class GOB(object):
@@ -124,7 +133,6 @@ class GOB(object):
                 can.itemconfig(self.id, outline=kw[key])
             else:
                 raise tk.TclError("unknown option \"-{0}\"".format(key))
-            
     
     def move(self, dx, dy):
         canv = self.gwin.canvas
@@ -222,13 +230,17 @@ class Circle(_BBox):
 
     def _draw(self):
         canv = self.gwin.canvas
-        canv.create_oval(self._unpack_vects())
+        self.id = canv.create_oval(self._unpack_vects())
 
 
 def main():
     gwin = GWin()
-    rec = Line(gwin, Vect2D(0,0), Vect2D(60,60), fill = "white")
+    gwin.setTransOriginCenter()
+    circ = Circle(gwin, Vect2D(0,0), 20, fill = "white")
+    rec = Rectangle(gwin, Vect2D(0,0), Vect2D(50,50), fill = "white")
     rec.draw()
+    gwin.setTransYFlip()
+    circ.draw()
     gwin.run()
 
 if __name__ == "__main__":

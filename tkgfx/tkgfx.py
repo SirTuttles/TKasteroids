@@ -197,6 +197,7 @@ class _BBox(GOB):
         super(_BBox, self).__init__(gwin, **kw)
         self.vects.extend([v1,v2])
 
+
 class Rectangle(_BBox):
     def _draw(self):
         canv = self.gwin.canvas
@@ -221,7 +222,8 @@ class Circle(_BBox):
 
     def _draw(self):
         canv = self.gwin.canvas
-        v1 = self.vects[0]
+        canv.create_oval(self._unpack_vects())
+
 
 def main():
     gwin = GWin()

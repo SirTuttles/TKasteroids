@@ -34,19 +34,48 @@ class Vect2D(object):
     def __str__(self):
         return str([self.x, self.y])
 
-class Tansform(object):
-    def __init__(self, xlow, ylow, xhigh, yhigh):
-        self.xbase = xlow
-        self.ybase = yhigh
 
-    def 
+class Transform(object):
+    def __init__(self, width, height):
+        self.x_max = width - 1
+        self.y_max = height - 1
+        self.auto_setting = 1
+    
+    def auto(self, vec):
+        if self.auto_setting == 0:
+            self.screen(vec)
+        elif self.auto_setting == 1:
+            self.y_flip(vec)
+        elif self.auto_setting == 2:
+            self.origin_centered(vec)
+
+    def screen(self, vec):
+        pass
+
+    def y_flip(self, vec):
+        vec.y = self.y_max - vec.y
+
+    def origin_centered(self, vec):
+        cx = self.x_max / 2
+        cy = self.y_max / 2
+        vec.x += cx
+        vec.y += cy
+        self.y_flip(vec)
+
+
+
 
 class GWin(object):
-    def __init__(self, width=640, height=480, title="untitled"):
+    """GWin (Graphics Window) class intended to provide functionality
+    heavily centered around custom draw graphics objects using
+    the tkinter canvas object."""
+    def __init__(self, width=640, height=480, title="Window"):
         self.root = tk.Tk()
         self.root.geometry("{0}x{1}".format(width, height))
         self.canvas = tk.Canvas(self.root, width=width, height=height)
         self.gobcont = []
+        self.transform = Transform(width, height)
+        self.transform.auto_setting = 2
 
         # setup canvas
         self.canvas.pack()
@@ -129,23 +158,26 @@ class GOB(object):
         pass
 
     def _unpack_vects(self):
+        """Returns alternating list with alternating x and y values
+        for all objects vectors. The returned coordinates are
+        transformed coordinates set according to the gwin's current
+        Transform object's setting. Primarily for tkinter.canvas.coords()"""
         unp = []
         for v in self.vects:
-            unp.extend([v.x, v.y])
+            nvec = Vect2D(v.x, v.y)
+            self.gwin.transform.auto(nvec)
+            unp.extend([nvec.x, nvec.y])
         return unp
+
 
 class Point(GOB):
     def __init__(self, gwin, vect, **kw):
         super(Point, self).__init__(gwin, **kw)
-        self.vects.append(vect)
+        self.vects.extend(vect, Vect2D(vect.x+1, vect.y+1))
 
     def _draw(self):
         canv = self.gwin.canvas
-        x1 = self.vects[0].x
-        y1 = self.vects[0].y
-        x2 = x1+1
-        y2 = y1+1
-        self.id = canv.create_line(x1,y1,x2,y2)
+        self.id = canv.create_line(*self._unpack_vects())
 
 
 class Line(GOB):
@@ -157,7 +189,7 @@ class Line(GOB):
         canv = self.gwin.canvas
         v1 = self.vects[0]
         v2 = self.vects[1]
-        self.id = canv.create_line(v1.x, v1.y, v2.x, v2.y)
+        self.id = canv.create_line(self._unpack_vects())
 
 
 class _BBox(GOB):
@@ -170,19 +202,23 @@ class Rectangle(_BBox):
         canv = self.gwin.canvas
         v1 = self.vects[0]
         v2 = self.vects[1]
-        self.id = canv.create_rectangle(v1.x, v1.y, v2.x, v2.y)
+        self.id = canv.create_rectangle(self._unpack_vects())
+
 
 class Oval(_BBox):
     def _draw(self):
         canv = self.gwin.canvas
         v1 = self.vects[0]
         v2 = self.vects[1]
-        self.id = canv.create_oval(v1.x, v1.y, v2.x, v2.y)
+        self.id = canv.create_oval(self._unpack_vects())
+
 
 class Circle(_BBox):
     def __init__(self, gwin, cen, rad, **kw):
-        v1 = Vect2D(cen.x - rad, cen.y - rad
-        super(Circle, self).__init__(
+        v1 = Vect2D(cen.x - rad, cen.y - rad)
+        v2 = Vect2D(cen.x + rad, cen.y + rad)
+        super(Circle, self).__init__(gwin, v1, v2, **kw)
+
     def _draw(self):
         canv = self.gwin.canvas
         v1 = self.vects[0]
@@ -191,7 +227,6 @@ def main():
     gwin = GWin()
     rec = Line(gwin, Vect2D(0,0), Vect2D(60,60), fill = "white")
     rec.draw()
-    rec.move(0,50)
     gwin.run()
 
 if __name__ == "__main__":

@@ -57,9 +57,9 @@ class Matrix2x2(object):
     def __str__(self):
         vis = ""
         for x in self.vals:
-            vis += "|"str(x[0])
+            vis += "|" + str(x[0])
             vis += "," + str(x[1])
-            vis += '|\n'
+            vis += "|\n"
         return vis
 
 class Transform(object):

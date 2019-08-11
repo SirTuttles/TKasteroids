@@ -32,31 +32,45 @@ class Vect2D(object):
             raise ValueError("Vect2D given bad argument", e)
     
     def __mult__(self, b):
-        pass
+        vec = Vect2D(0,0)
+        try:
+            for val in b:
+                print(val)
+        except:
+            pass
+        return vec
 
 
     def __str__(self):
         return str([self.x, self.y])
 
+
 class Matrix2x2(object):
     def __init__(self):
-        self.vals = self._set_vals()
+        self.matrix = self._make_matrix()
+
+    def __getitem__(self, val):
+        return self.matrix[val]
 
     def rotation(self, deg):
-        pass
+        mat = self.matrix
+        theta = math.radians(deg)
+        mat[0][0] = math.cos(theta)
+        mat[0][1] = math.sin(theta)
+        mat[1][0] = -math.sin(theta)
+        mat[1][1] = math.cos(theta)
 
-    def _set_vals(self):
+    def _make_matrix(self):
         vals = []
         for x in range(2):
             vals.append([])
             for y in range(2):
                 vals[x].append(0)
-        print(vals)
         return vals
 
     def __str__(self):
         vis = ""
-        for x in self.vals:
+        for x in self.matrix:
             vis += "|" + str(x[0])
             vis += "," + str(x[1])
             vis += "|\n"
@@ -271,7 +285,9 @@ def main():
         p = Point(gwin, Vect2D(x,y), fill="white")
         p.draw()
     mm = Matrix2x2()
-    print(mm)
+    mm.rotation(30)
+    mv = Vect2D(0,0)
+    mv * mm
     gwin.run()
 
 if __name__ == "__main__":

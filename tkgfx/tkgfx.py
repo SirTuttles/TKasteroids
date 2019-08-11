@@ -1,6 +1,7 @@
 """The TKGFX module is a simple wrapper over the tkinter interface with
 the intent of providing a more streamlined experience for use cases
-dealing prodomenantly with graphics."""
+dealing prodomenantly with graphics. It is tightly based around John Zelle's
+graphics module."""
 
 __version__ = "1.0.0"
 
@@ -33,6 +34,12 @@ class Vect2D(object):
     def __str__(self):
         return str([self.x, self.y])
 
+class Tansform(object):
+    def __init__(self, xlow, ylow, xhigh, yhigh):
+        self.xbase = xlow
+        self.ybase = yhigh
+
+    def 
 
 class GWin(object):
     def __init__(self, width=640, height=480, title="untitled"):
@@ -43,18 +50,15 @@ class GWin(object):
 
         # setup canvas
         self.canvas.pack()
-        self.canvas.config(bg="black", border=0, highlightthickness=0)
-
-
-        # tk stop codes
-        self.sc_tkloop = None
-        
+        self.canvas.config(bg="black", border=0, highlightthickness=0) 
 
     def run(self):
         self.root.mainloop()
 
 
 class GOB(object):
+    """GOB (Graphics Object) to hold base attributes and functionallity
+    for further objects to inherit from."""
     def __init__(self, gwin, **kw):
         self.gwin = gwin
         self.options = kw
@@ -168,9 +172,20 @@ class Rectangle(_BBox):
         v2 = self.vects[1]
         self.id = canv.create_rectangle(v1.x, v1.y, v2.x, v2.y)
 
-class Circle(_BBox):
+class Oval(_BBox):
     def _draw(self):
-        canv
+        canv = self.gwin.canvas
+        v1 = self.vects[0]
+        v2 = self.vects[1]
+        self.id = canv.create_oval(v1.x, v1.y, v2.x, v2.y)
+
+class Circle(_BBox):
+    def __init__(self, gwin, cen, rad, **kw):
+        v1 = Vect2D(cen.x - rad, cen.y - rad
+        super(Circle, self).__init__(
+    def _draw(self):
+        canv = self.gwin.canvas
+        v1 = self.vects[0]
 
 def main():
     gwin = GWin()

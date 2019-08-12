@@ -413,14 +413,44 @@ class Circle(_BBox):
         self.id = canv.create_oval(self._unpack_vects())
 
 
+class Polygon(GOB):
+    def __init__(self, gwin, vects, **kw):
+        super(Polygon, self).__init__(gwin, **kw)
+        self.vects = vects
+    
+    def _draw(self):
+        canv = self.gwin.canvas
+        self.id = canv.create_polygon(self._unpack_vects())
+
+    def default_config(self):
+        self.config(fill="black", outline="green")
+
+class PolyCirc(Polygon):
+    def __init__(self, gwin, vects, count, **kw):
+        super(PolyCirc,self).__init__(gwin, vects, **kw)
+
+
+class App(GWin):
+    def __init__(self):
+        super(App, self).__init__(640, 480, "Test")
+        self.circ= Circle(self, Vect2D(0,0), 20, outline="red")
+        self.circ.draw()
+        self.setTransOriginCenter()  
+        self.poly = Polygon(self, [
+            Vect2D(-10,-10),
+            Vect2D(10,-10),
+            Vect2D(0,10)
+            ])
+        self.poly.draw()
+        print(self.poly.center)
+
+    def onUpdate(self):
+        self.circ.rotate(1)
+        self.poly.rotate(1)
+
 def main():
-    gwin = GWin()
-    gwin.setTransOriginCenter()
-    rect = Rectangle(gwin,Vect2D(-400,-400),Vect2D(400,400))
-    rect.draw()
-    oval = Oval(gwin, Vect2D(40,40), Vect2D(80,80))
-    oval.draw()
-    gwin.run()
+    app = App()
+    app.run()
 
 if __name__ == "__main__":
     main()

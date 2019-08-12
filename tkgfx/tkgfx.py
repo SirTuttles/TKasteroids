@@ -221,6 +221,13 @@ class GWin(object):
                 task.stop()
                 self.tasks.remove(task)
 
+    def removeGob(self, id):
+        i = 0
+        for gob in self.gobcont[:]:
+            if gob.id == id:
+                rm = self.gobcont.pop(i)
+                rm.undraw()
+            i+=1
 
 
 class GOB(object):
@@ -242,6 +249,7 @@ class GOB(object):
         self.gwin.gobcont.append(self)
 
     def undraw(self):
+        self.gwin.canvas.delete(self.id)
         self._undraw()
         self.id = -1
 
@@ -291,8 +299,7 @@ class GOB(object):
             vec.copyFromVec(vec - self.origin)
             vec.copyFromVec(vec * mat)
             vec.copyFromVec(vec + self.origin)
-        canv.coords(self.id, *self._unpack_vects())
-        
+        canv.coords(self.id, *self._unpack_vects())     
 
     def _rotate(self, angle):
         # Override me in subclass
@@ -369,6 +376,7 @@ class Line(GOB):
     def default_config(self, **kw):
         self.config(fill="green")
 
+
 class _BBox(GOB):
     def __init__(self, gwin, v1, v2, **kw):
         super(_BBox, self).__init__(gwin, **kw)
@@ -412,7 +420,6 @@ def main():
     rect.draw()
     oval = Oval(gwin, Vect2D(40,40), Vect2D(80,80))
     oval.draw()
-    task = gwin.addTask(gwin, 1, oval.rotate, 1, recurring=True)
     gwin.run()
 
 if __name__ == "__main__":

@@ -1,7 +1,7 @@
-"""The TKGFX module is a simple wrapper over the tkinter interface with
+"""The TKGame module is a simple wrapper over the tkinter interface with
 the intent of providing a more streamlined experience for use cases
-dealing prodomenantly with graphics. It is tightly based around John Zelle's
-graphics module."""
+dealing prodomenantly with 2D graphics and games. It is tightly 
+based around John Zelle's graphics module."""
 
 __version__ = "1.0.0"
 
@@ -132,6 +132,7 @@ class Transform(object):
         vec.y += cy
         self.y_flip(vec)
 
+
 class TkTask(object):
     def __init__(self, gwin, ms, callback, *args, **kw):
         self.interval = ms
@@ -163,7 +164,67 @@ class TkTask(object):
         self.gwin.root.after_cancel(self.stopcode)
 
 
-class GWin(object):
+class PhysicsObject(object):
+    def __init__(self, pos, vel, ang):
+        self.position = pos
+        self.angle = ang
+        theta = math.radians(ang)
+        self.xvel = math.cos(ang) * vel
+        self.yvel = math.sin(ang) * vel
+        self.mapped_collider = None
+        self.step = 0.016 # sec
+
+        self.gravity = False
+        self.gravity_pullx = 0
+        self.gravity_pully = 9.8
+
+    def update(self):
+        xpos = self.position.x
+        ypos = self.position.y
+
+        xpos += self.xvel * self.step
+        ypos += self.yvel * self.step
+
+
+class GameEntity(object):
+    def __init__(self, gwin, graph_obj):
+        self.gwin = gwin
+        self.graphics_object = graph_obj
+        self.physics_object = None
+        self.collider = None
+    
+    def givePhysics(self):
+        pass
+
+    def giveCollider(self, col_type):
+        pass
+
+    def update(self):
+        if self.physics_object != None:
+            self._update_phys()
+        if self.ai != None:
+            self._update_ai()
+
+    def update_phys(self):
+        pass
+
+    def update_ai(self):
+        pass
+
+    def move(self, dx, dy):
+        if self.physics_object != None:
+            self.physics_object.move(dx, dy)
+        if self.collider != None:
+            self.collider.move(dx, dy)
+        self.graphics_object.move(dx, dy)
+    
+    def rotate(self, angle):
+        if self.collider != None:
+            self.collider.rotate(angle)
+        self.graphics_object.rotate(angle)
+
+
+class GameWindow(object):
     """GWin (Graphics Window) class intended to provide functionality
     heavily centered around custom draw graphics objects using
     the tkinter canvas object. Subclass and override onUpdate() method."""
@@ -172,7 +233,7 @@ class GWin(object):
         self.root.title(title)
         self.root.geometry("{0}x{1}".format(width, height))
         self.canvas = tk.Canvas(self.root, width=width, height=height)
-        self.gobcont = []
+        self.game_obj_container = []
         self.tasks = []
         self.transform = Transform(width, height)
         self.transform.auto_setting = 0
@@ -182,12 +243,38 @@ class GWin(object):
         self.canvas.config(bg="black", border=0, highlightthickness=0) 
 
         # TK Loop vars
-        self.tk_interval = 16 #ms
-        self.tk_lastrun = 0
 
-    def run(self):
+        # Universal vars
+        self.latency = 0
+        self.tickrate = 16 #ms
+        self.last_run = time.time()
+
+        # Toggle fix for slow updating tkinter rectangles in canvas
+        # IMPLEMENT ME LATER
+
+    def tkrun(self):
         self._tkloop()
         self.root.mainloop()
+
+    def run(self):
+        t_now = time.time()
+        t_last = t_now
+        t_elapsed = 0
+        t_lag = 0
+        while True:
+            t_now = time.time()
+            t_elapsed = t_now - t_last
+            t_last = t_now
+            t_lag += t_elapsed
+            tickrate_ms = self.tickrate / 1000
+            self.latency = t_lag
+            while (t_lag >= tickrate_ms):
+                self.onUpdate()
+                t_lag -= tickrate_ms
+            self.root.update()
+
+    def tk_update(self, latency):
+        self.root.update()
 
     def setTransScreen(self):
         self.transform.auto_setting = 0
@@ -199,9 +286,11 @@ class GWin(object):
         self.transform.auto_setting = 2
 
     def _tkloop(self):
-        self.tk_lastrun = time.time()
+        t_now = time.time()
+        self.latency = t_now - self.last_run
+        self.last_run = t_now
         self.onUpdate()
-        self.root.after(self.tk_interval, self._tkloop)
+        self.root.after(self.tickrate, self._tkloop)
 
     def onUpdate(self):
         #override me in subclass
@@ -230,23 +319,21 @@ class GWin(object):
             i+=1
 
 
-class GOB(object):
-    """GOB (Graphics Object) to hold base attributes and functionallity
+class GraphicsObject(object):
+    """Graphics Object to hold base attributes and functionallity
     for further objects to inherit from."""
-    def __init__(self, gwin, **kw):
+    def __init__(self, gwin, vects, **kw):
         self.gwin = gwin
         self.options = kw
         self.id = -1
-        self.vects = []
+        self.vects = vects
         self.origin = None
         self.center = None
+        self._gen_origin()
 
     def draw(self):
-        if self.origin == None:
-            self._gen_origin()
         self._draw()
         self.config(**self.options)
-        self.gwin.gobcont.append(self)
 
     def undraw(self):
         self.gwin.canvas.delete(self.id)
@@ -318,7 +405,7 @@ class GOB(object):
         c = Vect2D(0,0)
         xmax = self.vects[0].x
         xmin = xmax
-        ymax = self.vects[1].y
+        ymax = self.vects[0].y
         ymin = ymax
         for v in self.vects:
             if v.x > xmax:
@@ -329,7 +416,6 @@ class GOB(object):
                 ymax = v.y
             elif v.y < ymin:
                 ymin = v.y
-
         xmid = (xmax - xmin) / 2 + xmin
         ymid = (ymax - ymin) / 2 + ymin
         self.origin = Vect2D(xmid, ymid)
@@ -349,10 +435,9 @@ class GOB(object):
         return unp
 
 
-class Point(GOB):
-    def __init__(self, gwin, vect, **kw):
-        super(Point, self).__init__(gwin, **kw)
-        self.vects.extend([vect, Vect2D(vect.x+1, vect.y+1)])
+class Point(GraphicsObject):
+    def __init__(self, gwin, vects, **kw):
+        super(Point, self).__init__(gwin, vects, **kw)
 
     def _draw(self):
         canv = self.gwin.canvas
@@ -362,10 +447,9 @@ class Point(GOB):
         self.config(fill="green")
 
 
-class Line(GOB):
-    def __init__(self, gwin, v1, v2, **kw):
-        super(Line, self).__init__(gwin, **kw)
-        self.vects.extend([v1, v2])
+class Line(GraphicsObject):
+    def __init__(self, gwin, vects, **kw):
+        super(Line, self).__init__(gwin, vects, **kw)
         
     def _draw(self):
         canv = self.gwin.canvas
@@ -377,10 +461,9 @@ class Line(GOB):
         self.config(fill="green")
 
 
-class _BBox(GOB):
-    def __init__(self, gwin, v1, v2, **kw):
-        super(_BBox, self).__init__(gwin, **kw)
-        self.vects.extend([v1,v2])
+class _BBox(GraphicsObject):
+    def __init__(self, gwin, vects, **kw):
+        super(_BBox, self).__init__(gwin, vects, **kw)
 
     def default_config(self):
         self.config(fill ="black", outline="green")
@@ -406,17 +489,16 @@ class Circle(_BBox):
     def __init__(self, gwin, cen, rad, **kw):
         v1 = Vect2D(cen.x - rad, cen.y - rad)
         v2 = Vect2D(cen.x + rad, cen.y + rad)
-        super(Circle, self).__init__(gwin, v1, v2, **kw)
+        super(Circle, self).__init__(gwin, [v1,v2], **kw)
 
     def _draw(self):
         canv = self.gwin.canvas
         self.id = canv.create_oval(self._unpack_vects())
 
 
-class Polygon(GOB):
+class Polygon(GraphicsObject):
     def __init__(self, gwin, vects, **kw):
         super(Polygon, self).__init__(gwin, **kw)
-        self.vects = vects
     
     def _draw(self):
         canv = self.gwin.canvas
@@ -430,23 +512,28 @@ class PolyCirc(Polygon):
         super(PolyCirc,self).__init__(gwin, vects, **kw)
 
 
-class App(GWin):
+class App(GameWindow):
     def __init__(self):
         super(App, self).__init__(640, 480, "Test")
-        self.circ= Circle(self, Vect2D(0,0), 20, outline="red")
-        self.circ.draw()
-        self.setTransOriginCenter()  
-        self.poly = Polygon(self, [
-            Vect2D(-10,-10),
-            Vect2D(10,-10),
-            Vect2D(0,10)
-            ])
-        self.poly.draw()
-        print(self.poly.center)
+        self.setTransOriginCenter()
+        rect = Rectangle(self, [Vect2D(-20,-20), Vect2D(20,20)])
+        rect.draw()
+        self.game_entity = GameEntity(self, rect)
+
+        # Oscalate rect
+        self.xdir = -1
+        self.runs = 0
 
     def onUpdate(self):
-        self.circ.rotate(1)
-        self.poly.rotate(1)
+
+        self.game_entity.rotate(1)
+        if self.runs % 120 == 0:
+            self.xdir = self.xdir * -1
+            self.runs = 0
+        self.game_entity.move(1*self.xdir,0)
+        self.runs += 1
+        self.root.title("{0:0.5f}ms".format(round(self.latency,8)*1000))
+
 
 def main():
     app = App()
